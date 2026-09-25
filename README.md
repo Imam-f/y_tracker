@@ -59,6 +59,9 @@ npm run dist   # Build the Windows installer
 ## TODO
 
 - [ ] Add support for multiple browsers and devices.
+    - [ ] Add source device tag
+    - [ ] Add add_device functionality
+    - [ ] Make the sync engine
 
 ## License
 
