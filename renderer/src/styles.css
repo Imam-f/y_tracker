@@ -73,6 +73,9 @@
 .folder-controls .folder-grip{cursor:grab;margin-left:3px}.folder-controls .folder-grip:active{cursor:grabbing}
 .folder-rename-form{height:29px}.folder-rename-form input{width:145px}
 .duration-label{color:#8e9998}
+.duration-refresh{border:0;background:transparent;color:#c47a70;padding:0;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px}
+.duration-refresh:hover:not(:disabled){color:#d7473b}
+.duration-refresh:disabled{cursor:wait;opacity:.7}
 .folder-tab-list{border-top:1px solid #f0f1ef}
 .folder-tab-list .tab-row{padding:13px 16px;min-height:89px}
 .folder-tab-list .tab-row.tab-selected{background:#fff5f2;box-shadow:inset 3px 0 #e75145}

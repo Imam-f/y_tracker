@@ -189,24 +189,20 @@ function youtubeVideoId(url) {
   } catch { return null; }
 }
 
-function lookupDurations(tabs) {
+function lookupDurations(tabs, force = false) {
   for (const tab of tabs) {
     const id = youtubeVideoId(tab.url);
     const key = id && `video:${id}`;
-    if (!key || Number.isFinite(metadata[key]?.duration) || durationLookups.has(key)) continue;
+    if (!key || (!force && Number.isFinite(metadata[key]?.duration)) || durationLookups.has(key)) continue;
     durationLookups.add(key);
-    execFile(ytDlpPath(), ['--dump-single-json', '--skip-download', '--no-warnings', '--no-playlist', tab.url], {
+    execFile(ytDlpPath(), ['--print', '%(duration)s', '--skip-download', '--no-warnings', '--no-playlist', tab.url], {
       timeout: 30000,
-      maxBuffer: 1024 * 1024
+      maxBuffer: 64 * 1024
     }, (error, stdout) => {
       durationLookups.delete(key);
       if (error) return;
-      try {
-        const info = JSON.parse(stdout);
-        if (Number.isFinite(info.duration) && info.duration > 0 && info.duration <= 86400) {
-          updateMeta(key, { duration: info.duration });
-        }
-      } catch { /* Ignore unavailable or malformed yt-dlp responses. */ }
+      const duration = Number(stdout.trim());
+      if (Number.isFinite(duration) && duration > 0 && duration <= 86400) updateMeta(key, { duration });
     });
   }
 }
@@ -408,6 +404,11 @@ ipcMain.handle('rotate-webhook-secret', () => {
 });
 ipcMain.handle('copy-text', (_event, text) => { if (typeof text === 'string' && text.length <= 4096) clipboard.writeText(text); });
 ipcMain.handle('set-meta', (_event, key, patch) => updateMeta(key, patch));
+ipcMain.handle('refresh-duration', (_event, url) => {
+  if (typeof url !== 'string' || !youtubeVideoId(url)) return false;
+  lookupDurations([{ url }], true);
+  return true;
+});
 ipcMain.handle('create-folder', (_event, name, parentId) => changeOrganization(() => createFolder(organization, name, parentId || null)));
 ipcMain.handle('rename-folder', (_event, id, name) => changeOrganization(() => renameFolder(organization, id, name)));
 ipcMain.handle('delete-folder', (_event, id) => changeOrganization(() => deleteFolder(organization, id)));

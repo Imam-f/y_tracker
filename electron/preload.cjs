@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('desk', {
     return () => ipcRenderer.removeListener('state', listener);
   },
   setMeta: (key, patch) => ipcRenderer.invoke('set-meta', key, patch),
+  refreshDuration: (url) => ipcRenderer.invoke('refresh-duration', url),
   createFolder: (name, parentId) => ipcRenderer.invoke('create-folder', name, parentId),
   renameFolder: (id, name) => ipcRenderer.invoke('rename-folder', id, name),
   deleteFolder: (id) => ipcRenderer.invoke('delete-folder', id),

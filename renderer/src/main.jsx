@@ -94,6 +94,7 @@ const demoDesk = {
     return true;
   },
   focusTab: async () => true,
+  refreshDuration: async () => true,
   getWebhookSecret: async () => 'example-development-token-keep-private-0123456789abcdef0123456789ab',
   setWebhookSettings: async (patch) => {
     sampleState.webhook = { ...sampleState.webhook, ...patch, running: patch.enabled ?? sampleState.webhook.enabled,
@@ -307,7 +308,7 @@ function App() {
             <div className="group-control"><ListFilter size={16} /><span>Group by</span><select value={groupBy} onChange={(event) => setGroupBy(event.target.value)} aria-label="Group by"><option value="none">None</option><option value="status">Watch status</option><option value="priority">Priority</option><option value="tags">Tags</option></select><ChevronDown size={14} className="select-chevron" /></div>
           </div>
 
-          {filtered.length ? <div className="groups">{groups.map((group) => <section className="tab-group" key={group.label}><div className="group-heading"><h2>{group.label}</h2><span>{group.items.length}</span><div className="group-rule" /></div><div className="tab-list">{group.items.map((tab) => <TabRow key={`${tab.sourceId}:${tab.id}`} tab={tab} meta={data.metadata[tab.key] || {}} update={update} focus={() => desk?.focusTab(tab.sourceId, tab.id)} />)}</div></section>)}</div> : <div className="filtered-empty"><Search size={25} /><h2>No matching tabs</h2><p>Try a different search or choose another view.</p><button onClick={() => { setQuery(''); setView({ type: 'all' }); }}>Show all tabs</button></div>}
+           {filtered.length ? <div className="groups">{groups.map((group) => <section className="tab-group" key={group.label}><div className="group-heading"><h2>{group.label}</h2><span>{group.items.length}</span><div className="group-rule" /></div><div className="tab-list">{group.items.map((tab) => <TabRow key={`${tab.sourceId}:${tab.id}`} tab={tab} meta={data.metadata[tab.key] || {}} update={update} focus={() => desk?.focusTab(tab.sourceId, tab.id)} refreshDuration={() => desk?.refreshDuration(tab.url)} />)}</div></section>)}</div> : <div className="filtered-empty"><Search size={25} /><h2>No matching tabs</h2><p>Try a different search or choose another view.</p><button onClick={() => { setQuery(''); setView({ type: 'all' }); }}>Show all tabs</button></div>}
           <footer className="page-footer">{tabs.length} open YouTube {tabs.length === 1 ? 'tab' : 'tabs'} · {data.sources.length} {data.sources.length === 1 ? 'browser' : 'browsers'} connected</footer>
         </> : <EmptyState connected={data.sources.length > 0} openHelp={() => setShowHelp(true)} openFolder={() => desk?.openExtensionFolder()} />}
       </main>
@@ -511,7 +512,7 @@ function FoldersView({ sections, folders, metadata, update, desk, collapsedIds, 
           <div className="folder-spacer" />
            {!unfiled && <div className="folder-controls"><button title="New subfolder" aria-label={`New subfolder in ${section.name}`} onClick={() => { setCreating(true); setCreatingParentId(section.id); setNewName(''); setFolderError(''); }}><FolderPlus size={15} /></button><button title="Rename folder" aria-label={`Rename ${section.name}`} onClick={() => { setEditingId(section.id); setEditName(section.name); setFolderError(''); }}><Pencil size={15} /></button><button title="Delete folder; tabs move to Unfiled" aria-label={`Delete ${section.name}`} onClick={() => desk?.deleteFolder(section.id)}><Trash2 size={15} /></button><button className="folder-grip" draggable onDragStart={(event) => startFolderDrag(event, section.id)} onDragEnd={clearDrag} onKeyDown={(event) => { if (event.key === 'ArrowUp' && index > 0) { event.preventDefault(); desk?.moveFolder(section.id, folders[index - 1].id); } if (event.key === 'ArrowDown' && index < folders.length - 1) { event.preventDefault(); desk?.moveFolder(section.id, folders[index + 2]?.id || null); } }} title="Drag to reorder folders; arrow keys also work" aria-label={`Reorder ${section.name}`}><GripVertical size={17} /></button></div>}
         </div>
-          {!collapsedIds.has(section.id) && (section.items.length ? <div className="folder-tab-list" role="listbox" aria-label={`${section.name} tabs`}>{section.items.map((tab, tabIndex) => <TabRow key={tab.slotId} tab={tab} meta={metadata[tab.key] || {}} update={update} focus={() => desk?.focusTab(tab.sourceId, tab.id)} selected={selectedIds.has(tab.slotId)} onSelect={(event) => selectTab(section, tabIndex, event)} dragProps={{
+           {!collapsedIds.has(section.id) && (section.items.length ? <div className="folder-tab-list" role="listbox" aria-label={`${section.name} tabs`}>{section.items.map((tab, tabIndex) => <TabRow key={tab.slotId} tab={tab} meta={metadata[tab.key] || {}} update={update} focus={() => desk?.focusTab(tab.sourceId, tab.id)} refreshDuration={() => desk?.refreshDuration(tab.url)} selected={selectedIds.has(tab.slotId)} onSelect={(event) => selectTab(section, tabIndex, event)} dragProps={{
           onDragStart: (event) => startTabDrag(event, tab), onDragEnd: clearDrag,
           onDragOver: (event) => rowDragOver(event, tab),
           onDrop: (event) => rowDrop(event, tab, tabIndex, section),
@@ -534,10 +535,11 @@ function EmptyState({ connected, openHelp, openFolder }) {
   return <div className="empty-area"><div className="empty-illustration"><div className="empty-back" /><div className="empty-front"><Play size={23} fill="currentColor" /></div><div className="empty-line one" /><div className="empty-line two" /></div><h2>{connected ? 'No YouTube tabs open' : 'Your tabs, all together.'}</h2><p>{connected ? 'Open a YouTube page in your connected browser. It will show up here automatically.' : 'Connect your browser once to see every YouTube tab across your windows and virtual desktops.'}</p>{!connected && <div className="empty-actions"><button className="primary-button" onClick={openFolder}><FolderOpen size={17} /> Open extension folder</button><button className="text-button" onClick={openHelp}>How to connect <ArrowUpRight size={16} /></button></div>}</div>;
 }
 
-function TabRow({ tab, meta, update, focus, selected, onSelect, dragProps }) {
+function TabRow({ tab, meta, update, focus, refreshDuration, selected, onSelect, dragProps }) {
   const [editing, setEditing] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [imageFailed, setImageFailed] = useState(false);
+  const [refreshingDuration, setRefreshingDuration] = useState(false);
   const tags = meta.tags || [];
 
   function addTag(event) {
@@ -548,10 +550,17 @@ function TabRow({ tab, meta, update, focus, selected, onSelect, dragProps }) {
     setEditing(false);
   }
 
+  async function refreshVideoDuration(event) {
+    event.stopPropagation();
+    setRefreshingDuration(true);
+    await refreshDuration?.();
+    setTimeout(() => setRefreshingDuration(false), 1000);
+  }
+
   return <article className={`tab-row ${dragProps ? 'draggable-row' : ''} ${selected ? 'tab-selected' : ''} ${dragProps?.indicator ? `tab-drop-${dragProps.indicator}` : ''}`} role="option" aria-selected={selected} draggable={Boolean(dragProps)} onClick={onSelect} onDragStart={dragProps?.onDragStart} onDragEnd={dragProps?.onDragEnd} onDragOver={dragProps?.onDragOver} onDrop={dragProps?.onDrop}>
     {dragProps && <button className="tab-grip" title="Drag to reorder or move; arrow keys reorder" aria-label={`Reorder ${cleanTitle(tab.title)}`} onKeyDown={dragProps.onKeyDown}><GripVertical size={17} /></button>}
     <button className={`thumbnail ${!tab.video || imageFailed ? 'thumbnail-placeholder' : ''}`} onClick={focus} aria-label={`Switch to ${cleanTitle(tab.title)}`} title="Switch to tab">{tab.video && !imageFailed ? <img src={`https://i.ytimg.com/vi/${tab.video}/mqdefault.jpg`} alt="" loading="lazy" onError={() => setImageFailed(true)} /> : <Play size={23} fill="currentColor" />}</button>
-     <div className="tab-info"><button className="tab-title" onClick={focus} title={cleanTitle(tab.title)}>{cleanTitle(tab.title)} <ArrowUpRight size={14} /></button><div className="tab-meta"><span>{tab.browser}</span><span className="meta-separator">·</span><span>Window {tab.windowNumber}</span>{tab.active && <><span className="meta-separator">·</span><span className="active-label">Active tab</span></>}<span className="meta-separator">·</span><span className="duration-label">{formatDuration(meta.duration)}</span></div><div className="tag-line">{tags.map((tag) => <span className="tag-chip" key={tag}><Hash size={11} />{tag}<button onClick={() => update(tab.key, { tags: tags.filter((item) => item !== tag) })} aria-label={`Remove ${tag} tag`}><X size={12} /></button></span>)}{editing ? <form className="tag-form" onSubmit={addTag}><input autoFocus value={tagInput} onChange={(event) => setTagInput(event.target.value)} maxLength={32} placeholder="Tag name" aria-label="New tag name" onKeyDown={(event) => { if (event.key === 'Escape') setEditing(false); }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setEditing(false); }} /><button type="submit" aria-label="Add tag"><Check size={14} /></button></form> : <button className="add-tag" onClick={() => setEditing(true)}><Plus size={13} /> Tag</button>}</div></div>
+      <div className="tab-info"><button className="tab-title" onClick={focus} title={cleanTitle(tab.title)}>{cleanTitle(tab.title)} <ArrowUpRight size={14} /></button><div className="tab-meta"><span>{tab.browser}</span><span className="meta-separator">·</span><span>Window {tab.windowNumber}</span>{tab.active && <><span className="meta-separator">·</span><span className="active-label">Active tab</span></>}<span className="meta-separator">·</span>{Number.isFinite(meta.duration) ? <span className="duration-label">{formatDuration(meta.duration)}</span> : <button className="duration-refresh" onClick={refreshVideoDuration} disabled={refreshingDuration} title="Refresh video duration">{refreshingDuration ? 'Refreshing...' : 'Duration unavailable'}</button>}</div><div className="tag-line">{tags.map((tag) => <span className="tag-chip" key={tag}><Hash size={11} />{tag}<button onClick={() => update(tab.key, { tags: tags.filter((item) => item !== tag) })} aria-label={`Remove ${tag} tag`}><X size={12} /></button></span>)}{editing ? <form className="tag-form" onSubmit={addTag}><input autoFocus value={tagInput} onChange={(event) => setTagInput(event.target.value)} maxLength={32} placeholder="Tag name" aria-label="New tag name" onKeyDown={(event) => { if (event.key === 'Escape') setEditing(false); }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setEditing(false); }} /><button type="submit" aria-label="Add tag"><Check size={14} /></button></form> : <button className="add-tag" onClick={() => setEditing(true)}><Plus size={13} /> Tag</button>}</div></div>
     <div className="row-actions"><button className={`priority-button ${meta.priority ? 'selected' : ''}`} onClick={() => update(tab.key, { priority: !meta.priority })} aria-label={meta.priority ? 'Remove high priority' : 'Mark high priority'} title={meta.priority ? 'Remove high priority' : 'Mark high priority'}><Star size={18} fill={meta.priority ? 'currentColor' : 'none'} /></button><button className={`watched-button ${meta.watched ? 'is-watched' : ''}`} onClick={() => update(tab.key, { watched: !meta.watched })} aria-label={meta.watched ? 'Mark unwatched' : 'Mark watched'}><span className="watch-check"><Check size={13} strokeWidth={3} /></span>{meta.watched ? 'Watched' : 'Mark watched'}</button></div>
   </article>;
 }
