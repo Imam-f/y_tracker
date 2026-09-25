@@ -1,6 +1,6 @@
 {
   "name": "youtube-tab-desk",
-  "version": "1.2.0",
+  "version": "0.1.2",
   "description": "Organize YouTube tabs across browser windows and virtual desktops",
   "private": true,
   "type": "module",
