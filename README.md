@@ -56,6 +56,10 @@ npm run build  # Build the renderer
 npm run dist   # Build the Windows installer
 ```
 
+## TODO
+
+- [ ] Add support for multiple browsers and devices.
+
 ## License
 
 YouTube Tab Desk is available under the [MIT License](LICENSE).
