@@ -189,6 +189,21 @@ function youtubeVideoId(url) {
   } catch { return null; }
 }
 
+function parseDurationOutput(stdout) {
+  const text = String(stdout || '').trim();
+  if (!text) return null;
+
+  // yt-dlp can emit a numeric value, or JSON when a packaged version differs.
+  try {
+    const parsed = JSON.parse(text);
+    if (Number.isFinite(parsed?.duration) && parsed.duration > 0 && parsed.duration <= 86400) return parsed.duration;
+  } catch { /* Use the plain-text format below. */ }
+  const numericLine = text.split(/\r?\n/).map((line) => line.trim())
+    .find((line) => /^\d+(?:\.\d+)?$/.test(line));
+  const duration = numericLine == null ? null : Number(numericLine);
+  return Number.isFinite(duration) && duration > 0 && duration <= 86400 ? duration : null;
+}
+
 function lookupDurations(tabs, force = false) {
   for (const tab of tabs) {
     const id = youtubeVideoId(tab.url);
@@ -201,8 +216,8 @@ function lookupDurations(tabs, force = false) {
     }, (error, stdout) => {
       durationLookups.delete(key);
       if (error) return;
-      const duration = Number(stdout.trim());
-      if (Number.isFinite(duration) && duration > 0 && duration <= 86400) updateMeta(key, { duration });
+      const duration = parseDurationOutput(stdout);
+      if (duration !== null) updateMeta(key, { duration });
     });
   }
 }

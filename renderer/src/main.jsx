@@ -10,6 +10,7 @@ import './styles.css';
 const emptyOrganization = { folders: [], order: { unfiled: [] }, records: {} };
 const emptyWebhook = { enabled: true, lan: false, port: 17350, running: false, error: '', localUrl: 'http://127.0.0.1:17350', lanUrls: [] };
 const emptyState = { sources: [], metadata: {}, organization: emptyOrganization, webhook: emptyWebhook, serverError: '' };
+const collapsedFoldersStorageKey = 'tabdesk.collapsedFolders';
 const demo = import.meta.env.DEV && new URLSearchParams(location.search).has('demo');
 const sampleState = {
   sources: [
@@ -149,6 +150,13 @@ function formatFolderWatchTime(items, metadata) {
   return `${formatDuration(known)} watch time${unknown ? ` · ${unknown} unknown` : ''}`;
 }
 
+function formatTotalWatchTime(items, metadata) {
+  const known = items.reduce((total, tab) => total + (Number.isFinite(metadata[tab.key]?.duration) ? metadata[tab.key].duration : 0), 0);
+  const unknown = items.filter((tab) => !Number.isFinite(metadata[tab.key]?.duration)).length;
+  if (!known && unknown) return 'Total time unavailable';
+  return `${formatDuration(known)} total time${unknown ? ` · ${unknown} unknown` : ''}`;
+}
+
 function getGroups(tabs, groupBy, metadata) {
   if (groupBy === 'status') return [
     { label: 'Unwatched', items: tabs.filter((tab) => !metadata[tab.key]?.watched) },
@@ -201,7 +209,17 @@ function App() {
   const [showRemote, setShowRemote] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
-  const [collapsedFolderIds, setCollapsedFolderIds] = useState(() => new Set());
+  const [collapsedFolderIds, setCollapsedFolderIds] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(collapsedFoldersStorageKey) || '[]');
+      return new Set(Array.isArray(saved) ? saved.filter((id) => typeof id === 'string') : []);
+    } catch { return new Set(); }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(collapsedFoldersStorageKey, JSON.stringify([...collapsedFolderIds])); }
+    catch { /* Keep folder folding usable when browser storage is unavailable. */ }
+  }, [collapsedFolderIds]);
 
   useEffect(() => {
     if (!desk) return;
@@ -496,9 +514,9 @@ function FoldersView({ sections, folders, metadata, update, desk, collapsedIds, 
   }
 
   return <div className="folders-view">
-     <div className="folder-toolbar"><span>{folders.length} {folders.length === 1 ? 'folder' : 'folders'} · {sections.reduce((total, section) => total + section.items.length, 0)} tabs</span><div className="folder-toolbar-actions">{selectedIds.size > 0 && <><span className="selection-count">{selectedIds.size} selected</span><button className="clear-selection" onClick={() => { setSelectedIds(new Set()); setSelectionAnchor(null); }}>Clear selection</button></>}{creating ? <form className="folder-create-form" onSubmit={addFolder}><input autoFocus maxLength={48} placeholder={creatingParentId ? 'Subfolder name' : 'Folder name'} aria-label={creatingParentId ? 'New subfolder name' : 'New folder name'} value={newName} onChange={(event) => { setNewName(event.target.value); setFolderError(''); }} onKeyDown={(event) => { if (event.key === 'Escape') { setCreating(false); setCreatingParentId(null); setNewName(''); } }} /><button type="submit" aria-label="Save folder"><Check size={16} /></button><button type="button" onClick={() => { setCreating(false); setCreatingParentId(null); setNewName(''); setFolderError(''); }} aria-label="Cancel"><X size={16} /></button></form> : <button className="new-folder-button" onClick={() => { setCreating(true); setCreatingParentId(null); }}><Plus size={16} /> New folder</button>}</div></div>
+     <div className="folder-toolbar"><span>{folders.length} {folders.length === 1 ? 'folder' : 'folders'} · {formatTotalWatchTime(sections.flatMap((section) => section.items), metadata)} · {sections.reduce((total, section) => total + section.items.length, 0)} tabs</span><div className="folder-toolbar-actions">{selectedIds.size > 0 && <><span className="selection-count">{selectedIds.size} selected</span><button className="clear-selection" onClick={() => { setSelectedIds(new Set()); setSelectionAnchor(null); }}>Clear selection</button></>}{creating ? <form className="folder-create-form" onSubmit={addFolder}><input autoFocus maxLength={48} placeholder={creatingParentId ? 'Subfolder name' : 'Folder name'} aria-label={creatingParentId ? 'New subfolder name' : 'New folder name'} value={newName} onChange={(event) => { setNewName(event.target.value); setFolderError(''); }} onKeyDown={(event) => { if (event.key === 'Escape') { setCreating(false); setCreatingParentId(null); setNewName(''); } }} /><button type="submit" aria-label="Save folder"><Check size={16} /></button><button type="button" onClick={() => { setCreating(false); setCreatingParentId(null); setNewName(''); setFolderError(''); }} aria-label="Cancel"><X size={16} /></button></form> : <button className="new-folder-button" onClick={() => { setCreating(true); setCreatingParentId(null); }}><Plus size={16} /> New folder</button>}</div></div>
     {folderError && <p className="folder-error">{folderError}</p>}
-    {sections.map((section, index) => {
+     {sections.map((section, index) => {
       const unfiled = section.id === 'unfiled';
        return <section className={`folder-section ${over?.type === 'section' && over.id === section.id ? 'folder-drop-target' : ''} ${over?.type === 'folder' && over.id === section.id ? `folder-drop-${over.edge}` : ''}`} style={{ marginLeft: `${Math.min(section.depth || 0, 6) * 24}px` }} key={section.id}
         onDragOver={(event) => { if (accepts(event, 'tab')) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setOver({ type: 'section', id: section.id }); } }}
