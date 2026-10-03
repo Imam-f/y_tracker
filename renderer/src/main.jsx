@@ -208,6 +208,7 @@ function getFolderSections(tabs, organization) {
 
 function App() {
   const [data, setData] = useState(demo ? sampleState : emptyState);
+  const [maximized, setMaximized] = useState(false);
   const [view, setView] = useState({ type: 'all' });
   const [groupBy, setGroupBy] = useState('none');
   const [query, setQuery] = useState('');
@@ -233,6 +234,13 @@ function App() {
     const unsubscribeNavigate = desk.onNavigateView?.((remoteView) => { setView(remoteView); setQuery(''); });
     desk.getState().then(setData);
     return () => { unsubscribe(); unsubscribeNavigate?.(); };
+  }, []);
+
+  useEffect(() => {
+    if (!desk?.onWindowMaximized) return;
+    const unsubscribe = desk.onWindowMaximized(setMaximized);
+    desk.isWindowMaximized().then(setMaximized);
+    return unsubscribe;
   }, []);
 
   const tabs = useMemo(() => {
@@ -300,7 +308,16 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <>
+    {desk?.minimizeWindow && <div className="window-titlebar">
+      <div className="window-title"><span className="window-title-icon"><Play size={10} fill="currentColor" /></span>YouTube Tab Desk</div>
+      <div className="window-controls">
+        <button type="button" className="window-control" aria-label="Minimize window" title="Minimize" onClick={() => desk.minimizeWindow()}><span className="window-minimize-icon" /></button>
+        <button type="button" className="window-control" aria-label={maximized ? 'Restore window' : 'Maximize window'} title={maximized ? 'Restore' : 'Maximize'} onClick={() => desk.toggleMaximizeWindow()}><span className={maximized ? 'window-restore-icon' : 'window-maximize-icon'} /></button>
+        <button type="button" className="window-control window-close" aria-label="Close window" title="Close" onClick={() => desk.closeWindow()}><X size={16} strokeWidth={1.7} /></button>
+      </div>
+    </div>}
+    <div className={`app-shell${desk?.minimizeWindow ? ' with-titlebar' : ''}`}>
       <aside className="sidebar">
         <div className="brand"><div className="brand-mark"><Play size={16} fill="currentColor" strokeWidth={2.5} /></div><span>tabdesk<span className="brand-dot">.</span></span></div>
         <div className="sidebar-content">
@@ -352,6 +369,7 @@ function App() {
       {showHelp && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowHelp(false); }}><div className="help-modal" role="dialog" aria-modal="true" aria-label="Connect a browser"><button className="modal-close" onClick={() => setShowHelp(false)} aria-label="Close"><X size={18} /></button><div className="modal-icon"><FolderOpen size={22} /></div><h2>Connect your browser</h2><p className="modal-intro">Add the connector to each Chrome, Edge, Brave, or other Chromium profile you want to track.</p><ol className="steps"><li><span>01</span><p>Open <strong>chrome://extensions</strong> (or <strong>edge://extensions</strong>) and turn on <strong>Developer mode</strong>.</p></li><li><span>02</span><p>Click <strong>Load unpacked</strong> and select the extension folder.</p></li><li><span>03</span><p>Leave this app open. Tabs from every window and virtual desktop will appear automatically.</p></li><li><span>04</span><p>For another computer, enable <strong>Allow local network</strong> in Remote control. In that browser’s connector options, paste the <strong>browser connector address</strong> and <strong>Bearer token</strong>, name the device, then click <strong>Save & connect</strong>.</p></li></ol><button className="primary-button" onClick={() => desk?.openExtensionFolder()}><FolderOpen size={17} /> Open extension folder <ArrowUpRight size={16} /></button><div className="modal-note">Browser and device source tags are added automatically. Click the connector’s toolbar icon to change its settings.</div></div></div>}
       {showRemote && <RemoteModal settings={data.webhook || emptyWebhook} desk={desk} close={() => setShowRemote(false)} />}
     </div>
+    </>
   );
 }
 

@@ -1,5 +1,23 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
 
+.window-titlebar{height:36px;display:flex;align-items:center;justify-content:space-between;background:#fff;border-bottom:1px solid #e9ecea;color:#626d70;-webkit-app-region:drag;user-select:none}
+.window-title{display:flex;align-items:center;gap:8px;padding-left:15px;font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:700}
+.window-title-icon{display:grid;place-items:center;width:19px;height:19px;border-radius:5px;background:#e75145;color:#fff}
+.window-title-icon svg{margin-left:1px}
+.window-controls{height:100%;display:flex;-webkit-app-region:no-drag}
+.window-control{width:46px;height:100%;border:0;border-radius:0;background:transparent;color:#566062;display:grid;place-items:center;padding:0}
+.window-control:hover{background:#e9ecea}
+.window-control.window-close:hover{background:#e75145;color:white}
+.window-control:focus-visible{outline:2px solid #da655a;outline-offset:-2px}
+.window-minimize-icon{width:11px;height:1px;background:currentColor;margin-top:8px}
+.window-maximize-icon{width:10px;height:10px;border:1px solid currentColor}
+.window-restore-icon{position:relative;width:10px;height:10px;border:1px solid currentColor;background:#fff}
+.window-restore-icon:before{content:'';position:absolute;left:2px;bottom:2px;width:9px;height:9px;border:1px solid currentColor;border-bottom:0;border-left:0}
+.window-control:hover .window-restore-icon{background:#e9ecea}
+.app-shell.with-titlebar{height:calc(100vh - 36px);min-height:0}
+.with-titlebar .sidebar{min-height:0}
+.with-titlebar .main-panel{max-height:calc(100vh - 36px)}
+
 .sidebar-footer .remote-link{margin-top:24px;width:100%;text-align:left}
 .sidebar-content{overflow-y:auto;max-height:calc(100vh - 320px)}
 .source-chip{display:inline-flex;align-items:center;gap:5px;max-width:240px;background:#edf2f7;color:#677b8f;border-radius:5px;padding:3px 6px;font-size:10px;font-weight:700;min-width:0}

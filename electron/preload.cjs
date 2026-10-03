@@ -2,6 +2,15 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('desk', {
   getState: () => ipcRenderer.invoke('get-state'),
+  isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+  minimizeWindow: () => ipcRenderer.invoke('window-minimize'),
+  toggleMaximizeWindow: () => ipcRenderer.invoke('window-toggle-maximize'),
+  closeWindow: () => ipcRenderer.invoke('window-close'),
+  onWindowMaximized: (callback) => {
+    const listener = (_event, maximized) => callback(maximized);
+    ipcRenderer.on('window-maximized', listener);
+    return () => ipcRenderer.removeListener('window-maximized', listener);
+  },
   getWebhookSecret: () => ipcRenderer.invoke('get-webhook-secret'),
   setWebhookSettings: (settings) => ipcRenderer.invoke('set-webhook-settings', settings),
   rotateWebhookSecret: () => ipcRenderer.invoke('rotate-webhook-secret'),

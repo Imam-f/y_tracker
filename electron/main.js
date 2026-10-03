@@ -372,6 +372,13 @@ async function executeWebhook(command) {
 }
 
 ipcMain.handle('get-state', () => state());
+ipcMain.handle('window-is-maximized', (event) => event.sender === window?.webContents && window.isMaximized());
+ipcMain.handle('window-minimize', (event) => { if (event.sender === window?.webContents) window.minimize(); });
+ipcMain.handle('window-toggle-maximize', (event) => {
+  if (event.sender !== window?.webContents) return;
+  if (window.isMaximized()) window.unmaximize(); else window.maximize();
+});
+ipcMain.handle('window-close', (event) => { if (event.sender === window?.webContents) window.close(); });
 ipcMain.handle('get-webhook-secret', () => webhookConfig.token);
 ipcMain.handle('set-webhook-settings', (_event, patch) => updateWebhookSettings(patch));
 ipcMain.handle('rotate-webhook-secret', () => {
@@ -422,6 +429,7 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#f8f9f7',
     title: 'YouTube Tab Desk',
+    frame: false,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -429,6 +437,8 @@ function createWindow() {
       nodeIntegration: false
     }
   });
+  window.on('maximize', () => window.webContents.send('window-maximized', true));
+  window.on('unmaximize', () => window.webContents.send('window-maximized', false));
   if (process.env.VITE_DEV_SERVER_URL) {
     window.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else if (!app.isPackaged) {
