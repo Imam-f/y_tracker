@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YouTube Tab Desk connector</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <div class="eyebrow">YOUTUBE TAB DESK</div>
+    <h1>Connect this browser</h1>
+    <p>Send YouTube tabs from every window in this profile to your desktop app.</p>
+    <div id="status" role="status">Checking connection…</div>
+    <form id="settings">
+      <label for="address">App address</label>
+      <input id="address" type="text" required placeholder="ws://127.0.0.1:17349" spellcheck="false">
+      <small>For another computer, enable Allow local network in the app’s Remote control settings and copy its browser connector address.</small>
+      <label for="token">Access token</label>
+      <input id="token" type="password" autocomplete="off" spellcheck="false">
+      <small>Required for the /connector endpoint. Copy the Bearer token from the app.</small>
+      <label for="deviceName">Device name</label>
+      <input id="deviceName" type="text" maxlength="60" placeholder="e.g. Work laptop">
+      <small>Shown as a source tag on your tabs. Local connections use the computer name when blank.</small>
+      <label for="profileName">Profile name (optional)</label>
+      <input id="profileName" type="text" maxlength="60" placeholder="e.g. Personal">
+      <label for="browserName">Browser name (optional)</label>
+      <input id="browserName" type="text" maxlength="60" placeholder="Auto-detect; enter Brave if needed">
+      <div class="actions"><button id="save" type="submit">Save & connect</button><button id="reset" type="button">Use local app</button></div>
+      <p id="result" role="status"></p>
+    </form>
+    <p class="note">Install this connector in every browser profile you want to track. For network connections, keep the app open on the receiving computer.</p>
+  </main>
+  <script src="settings.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,6 +1,18 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
 
 .sidebar-footer .remote-link{margin-top:24px;width:100%;text-align:left}
+.sidebar-content{overflow-y:auto;max-height:calc(100vh - 320px)}
+.source-chip{display:inline-flex;align-items:center;gap:5px;max-width:240px;background:#edf2f7;color:#677b8f;border-radius:5px;padding:3px 6px;font-size:10px;font-weight:700;min-width:0}
+.source-chip button{border:0;padding:0;background:none;color:inherit;font:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.source-chip>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.source-chip svg{flex:none}
+.source-chip button:hover{text-decoration:underline}
+.source-chip.remote-source{background:#f0edfa;color:#8067a6}
+.connection-chip{font-size:9px;font-weight:700;color:#8a9693;background:#f2f4f2;padding:3px 6px;border-radius:5px}
+.connection-chip.is-remote{color:#8067a6;background:#f0edfa}
+.connector-hint{color:#8d9896;font-size:11px;line-height:1.6;margin:8px 0 15px}
+.tab-meta{flex-wrap:wrap}
+.help-modal:not(.remote-modal){max-height:92vh;overflow-y:auto}
 .sidebar-footer .remote-link+.help-link{margin-top:15px}
 .remote-mini-dot{width:6px;height:6px;margin-left:auto;border-radius:50%;background:#c5cbca}
 .remote-mini-dot.on{background:#42b778}

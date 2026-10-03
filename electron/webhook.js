@@ -42,6 +42,10 @@ export function publicSnapshot({ sources, metadata, organization }) {
         tabId: tab.id,
         windowId: tab.windowId,
         browser: source.name,
+        deviceName: source.deviceName || 'This computer',
+        profileName: source.profileName || '',
+        sourceLabel: `${source.deviceName || 'This computer'} · ${source.profileName || source.name}`,
+        remote: Boolean(source.remote),
         title: tab.title,
         url: tab.url,
         active: tab.active,
@@ -68,7 +72,7 @@ export function publicSnapshot({ sources, metadata, organization }) {
     ...tab, folderId: folder.id, folderName: folder.name, position: index + 1
   })));
   return {
-    sources: connected.map((source) => ({ id: source.id, name: source.name, tabCount: source.tabs.length })),
+    sources: connected.map((source) => ({ id: source.id, name: source.name, deviceName: source.deviceName || 'This computer', profileName: source.profileName || '', remote: Boolean(source.remote), tabCount: source.tabs.length })),
     folders: folders.map((folder) => ({ id: folder.id, name: folder.name, tabCount: folder.tabs.length })),
     tabs,
     totals: { tabs: tabs.length, folders: organization.folders.length, sources: connected.length }
@@ -157,7 +161,7 @@ function csvFromSnapshot(snapshot) {
   };
   return makeCsv(snapshot.tabs.map((tab) => ({
     Folder: tab.folderName, Position: tab.position, Title: tab.title.replace(/\s*[-–|]\s*YouTube\s*$/, '').trim() || 'YouTube',
-    URL: tab.url, Browser: tab.browser, Duration: duration(tab.durationSeconds),
+    URL: tab.url, Browser: tab.browser, Source: tab.sourceLabel, Device: tab.deviceName, Remote: tab.remote ? 'Yes' : 'No', Duration: duration(tab.durationSeconds),
     Watched: tab.watched ? 'Yes' : 'No', 'High priority': tab.priority ? 'Yes' : 'No', Tags: tab.tags.join('; ')
   })));
 }

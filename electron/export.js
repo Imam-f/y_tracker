@@ -1,4 +1,4 @@
-export const EXPORT_COLUMNS = ['Folder', 'Position', 'Title', 'URL', 'Browser', 'Duration', 'Watched', 'High priority', 'Tags'];
+export const EXPORT_COLUMNS = ['Folder', 'Position', 'Title', 'URL', 'Browser', 'Source', 'Device', 'Remote', 'Duration', 'Watched', 'High priority', 'Tags'];
 
 export function makeCsv(rows) {
   const cell = (value) => {

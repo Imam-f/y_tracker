@@ -2,9 +2,12 @@
   "manifest_version": 3,
   "name": "YouTube Tab Desk Connector",
   "version": "0.1.3",
-  "description": "Sends your open YouTube tabs and watch progress to the local YouTube Tab Desk app.",
+  "description": "Sends your YouTube tabs and watch progress to YouTube Tab Desk on this computer or another device.",
   "permissions": ["tabs", "storage", "alarms"],
   "host_permissions": ["http://127.0.0.1/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "action": { "default_title": "Configure YouTube Tab Desk connector" },
   "background": { "service_worker": "background.js" },
   "content_scripts": [{
     "matches": ["*://*.youtube.com/*", "*://youtube.com/*"],

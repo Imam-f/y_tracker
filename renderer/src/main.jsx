@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import {
   ArrowUpRight, Check, CheckCheck, ChevronDown, CircleHelp, Clock3,
   Copy, Download, Eye, EyeOff, Folder, FolderOpen, GripVertical, Hash,
-  FolderPlus, LayoutGrid, ListFilter, Pencil, Play, Plus, Radio, RotateCw, Search, Star, Trash2, X
+  FolderPlus, LayoutGrid, ListFilter, Monitor, Pencil, Play, Plus, Radio, RotateCw, Search, Star, Trash2, X
 } from 'lucide-react';
 import './styles.css';
 
@@ -14,13 +14,13 @@ const collapsedFoldersStorageKey = 'tabdesk.collapsedFolders';
 const demo = import.meta.env.DEV && new URLSearchParams(location.search).has('demo');
 const sampleState = {
   sources: [
-    { id: 'chrome', name: 'Chrome / Chromium', tabs: [
+    { id: 'chrome', name: 'Chrome / Chromium', deviceName: 'This computer', profileName: 'Personal', remote: false, tabs: [
       { id: 1, slotId: 'chrome:1', windowId: 12, title: 'How to actually learn anything | The science of learning - YouTube', url: 'https://www.youtube.com/watch?v=V6yiyFXmJ7s', active: false },
       { id: 2, slotId: 'chrome:2', windowId: 12, title: 'Building a second brain: a practical guide - YouTube', url: 'https://www.youtube.com/watch?v=OP3dA2GcAh8', active: true },
       { id: 3, slotId: 'chrome:3', windowId: 32, title: 'A quiet weekend in Tokyo | slow living - YouTube', url: 'https://www.youtube.com/watch?v=0nTO4zSEpOs', active: false },
       { id: 4, slotId: 'chrome:4', windowId: 32, title: 'YouTube', url: 'https://www.youtube.com/feed/subscriptions', active: false }
     ] },
-    { id: 'edge', name: 'Microsoft Edge', tabs: [
+    { id: 'edge', name: 'Microsoft Edge', deviceName: 'Work laptop', profileName: 'Work', remote: true, tabs: [
       { id: 5, slotId: 'edge:5', windowId: 33, title: 'Make the most of your time | a better workflow - YouTube', url: 'https://www.youtube.com/watch?v=luQSQuCHtcI', active: false },
       { id: 6, slotId: 'edge:6', windowId: 33, title: 'The art of doing nothing - YouTube', url: 'https://www.youtube.com/watch?v=6n3pFFPSlW4', active: false }
     ] }
@@ -86,7 +86,7 @@ const demoDesk = {
     publishDemo(); return true;
   },
   exportList: async (rows) => {
-    const columns = ['Folder', 'Position', 'Title', 'URL', 'Browser', 'Duration', 'Watched', 'High priority', 'Tags'];
+    const columns = ['Folder', 'Position', 'Title', 'URL', 'Browser', 'Source', 'Device', 'Remote', 'Duration', 'Watched', 'High priority', 'Tags'];
     const csv = [columns, ...rows.map((row) => columns.map((column) => row[column]))].map((line) => line.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\r\n');
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -158,6 +158,12 @@ function formatTotalWatchTime(items, metadata) {
 }
 
 function getGroups(tabs, groupBy, metadata) {
+  if (groupBy === 'source') {
+    return [...new Set(tabs.map((tab) => tab.sourceId))].map((sourceId) => ({
+      id: sourceId, label: tabs.find((tab) => tab.sourceId === sourceId).sourceLabel,
+      items: tabs.filter((tab) => tab.sourceId === sourceId)
+    }));
+  }
   if (groupBy === 'status') return [
     { label: 'Unwatched', items: tabs.filter((tab) => !metadata[tab.key]?.watched) },
     { label: 'Watched', items: tabs.filter((tab) => metadata[tab.key]?.watched) }
@@ -237,7 +243,11 @@ function App() {
         const count = [...windowNumbers.keys()].filter((key) => key.startsWith(`${source.id}:`)).length;
         windowNumbers.set(windowKey, count + 1);
       }
-      return { ...tab, slotId: tab.slotId || `${source.id}:${tab.id}`, sourceId: source.id, browser: source.name, windowNumber: windowNumbers.get(windowKey), key: tabKey(tab), video: videoId(tab.url) };
+      const deviceName = source.deviceName || (source.remote ? 'Remote device' : 'This computer');
+      const sourceLabel = `${deviceName} · ${source.profileName || source.name}`;
+      return { ...tab, slotId: tab.slotId || `${source.id}:${tab.id}`, sourceId: source.id, browser: source.name,
+        deviceName, profileName: source.profileName || '', sourceLabel, remote: Boolean(source.remote),
+        windowNumber: windowNumbers.get(windowKey), key: tabKey(tab), video: videoId(tab.url) };
     }));
   }, [data.sources]);
 
@@ -256,7 +266,9 @@ function App() {
     if (view.type === 'unwatched' && meta.watched) return false;
     if (view.type === 'priority' && !meta.priority) return false;
     if (view.type === 'tag' && !meta.tags?.includes(view.value)) return false;
-    const text = `${tab.title} ${tab.url} ${tab.browser} ${(meta.tags || []).join(' ')}`.toLowerCase();
+    if (view.type === 'source' && tab.sourceId !== view.value) return false;
+    if (view.type === 'remote' && !tab.remote) return false;
+    const text = `${tab.title} ${tab.url} ${tab.browser} ${tab.sourceLabel} ${tab.remote ? 'Remote' : 'Local'} ${(meta.tags || []).join(' ')}`.toLowerCase();
     return text.includes(query.trim().toLowerCase());
   }), [tabs, data.metadata, view, query]);
 
@@ -264,6 +276,7 @@ function App() {
   const organization = data.organization || emptyOrganization;
   const folderSections = useMemo(() => getFolderSections(tabs, organization), [tabs, organization]);
   const viewLabel = view.type === 'all' ? 'YouTube tabs' : view.type === 'folders' ? 'Folders' : view.type === 'tag' ? view.value :
+    view.type === 'source' ? tabs.find((tab) => tab.sourceId === view.value)?.sourceLabel || 'Source' : view.type === 'remote' ? 'Remote tabs' :
     view.type === 'priority' ? 'High priority' : view.type === 'watched' ? 'Watched' : 'Unwatched';
 
   function update(key, patch) {
@@ -278,7 +291,7 @@ function App() {
       return {
         Folder: section.name, Position: index + 1, Title: cleanTitle(tab.title), URL: tab.url,
         Duration: formatDuration(meta.duration),
-        Browser: tab.browser, Watched: meta.watched ? 'Yes' : 'No',
+        Browser: tab.browser, Source: tab.sourceLabel, Device: tab.deviceName, Remote: tab.remote ? 'Yes' : 'No', Watched: meta.watched ? 'Yes' : 'No',
         'High priority': meta.priority ? 'Yes' : 'No', Tags: (meta.tags || []).join('; ')
       };
     }));
@@ -299,6 +312,11 @@ function App() {
             <NavItem icon={CheckCheck} label="Watched" count={counts.watched} active={view.type === 'watched'} onClick={() => setView({ type: 'watched' })} />
             <NavItem icon={Star} label="High priority" count={counts.priority} active={view.type === 'priority'} onClick={() => setView({ type: 'priority' })} />
           </nav>
+          {data.sources.length > 0 && <><div className="tag-nav-header"><span className="nav-label">SOURCES</span><span className="tag-total">{data.sources.length}</span></div>
+            <nav className="nav-list" aria-label="Sources">
+              {data.sources.map((source) => <NavItem key={source.id} icon={source.remote ? Radio : Monitor} label={`${source.deviceName || (source.remote ? 'Remote device' : 'This computer')} · ${source.profileName || source.name}`} count={source.tabs.length} active={view.type === 'source' && view.value === source.id} onClick={() => setView({ type: 'source', value: source.id })} />)}
+              {data.sources.some((source) => source.remote) && <NavItem icon={Radio} label="Remote tabs" count={tabs.filter((tab) => tab.remote).length} active={view.type === 'remote'} onClick={() => setView({ type: 'remote' })} />}
+            </nav></>}
           <div className="tag-nav-header"><span className="nav-label">TAGS</span><span className="tag-total">{tags.length}</span></div>
           <nav className="nav-list tag-nav" aria-label="Tags">
             {tags.length ? tags.map((tag) => <NavItem key={tag} icon={Hash} label={tag} count={tabs.filter((tab) => data.metadata[tab.key]?.tags?.includes(tag)).length} active={view.type === 'tag' && view.value === tag} onClick={() => setView({ type: 'tag', value: tag })} />) : <p className="no-tags">Tags you add will show up here.</p>}
@@ -323,15 +341,15 @@ function App() {
         {view.type === 'folders' ? <><FoldersView sections={folderSections} folders={organization.folders} metadata={data.metadata} update={update} desk={desk} collapsedIds={collapsedFolderIds} setCollapsedIds={setCollapsedFolderIds} /><footer className="page-footer">{tabs.length} open YouTube {tabs.length === 1 ? 'tab' : 'tabs'} · {organization.folders.length} {organization.folders.length === 1 ? 'folder' : 'folders'}</footer></> : tabs.length > 0 ? <>
           <div className="toolbar">
             <label className="search-field"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search titles, tags, links..." aria-label="Search tabs" />{query && <button onClick={() => setQuery('')} aria-label="Clear search"><X size={15} /></button>}</label>
-            <div className="group-control"><ListFilter size={16} /><span>Group by</span><select value={groupBy} onChange={(event) => setGroupBy(event.target.value)} aria-label="Group by"><option value="none">None</option><option value="status">Watch status</option><option value="priority">Priority</option><option value="tags">Tags</option></select><ChevronDown size={14} className="select-chevron" /></div>
+            <div className="group-control"><ListFilter size={16} /><span>Group by</span><select value={groupBy} onChange={(event) => setGroupBy(event.target.value)} aria-label="Group by"><option value="none">None</option><option value="status">Watch status</option><option value="priority">Priority</option><option value="tags">Tags</option><option value="source">Source</option></select><ChevronDown size={14} className="select-chevron" /></div>
           </div>
 
-           {filtered.length ? <div className="groups">{groups.map((group) => <section className="tab-group" key={group.label}><div className="group-heading"><h2>{group.label}</h2><span>{group.items.length}</span><div className="group-rule" /></div><div className="tab-list">{group.items.map((tab) => <TabRow key={`${tab.sourceId}:${tab.id}`} tab={tab} meta={data.metadata[tab.key] || {}} update={update} focus={() => desk?.focusTab(tab.sourceId, tab.id)} refreshDuration={() => desk?.refreshDuration(tab.url)} />)}</div></section>)}</div> : <div className="filtered-empty"><Search size={25} /><h2>No matching tabs</h2><p>Try a different search or choose another view.</p><button onClick={() => { setQuery(''); setView({ type: 'all' }); }}>Show all tabs</button></div>}
+           {filtered.length ? <div className="groups">{groups.map((group) => <section className="tab-group" key={group.id || group.label}><div className="group-heading"><h2>{group.label}</h2><span>{group.items.length}</span><div className="group-rule" /></div><div className="tab-list">{group.items.map((tab) => <TabRow key={`${tab.sourceId}:${tab.id}`} tab={tab} meta={data.metadata[tab.key] || {}} update={update} focus={() => desk?.focusTab(tab.sourceId, tab.id)} refreshDuration={() => desk?.refreshDuration(tab.url)} selectSource={() => setView({ type: 'source', value: tab.sourceId })} />)}</div></section>)}</div> : <div className="filtered-empty"><Search size={25} /><h2>No matching tabs</h2><p>Try a different search or choose another view.</p><button onClick={() => { setQuery(''); setView({ type: 'all' }); }}>Show all tabs</button></div>}
           <footer className="page-footer">{tabs.length} open YouTube {tabs.length === 1 ? 'tab' : 'tabs'} · {data.sources.length} {data.sources.length === 1 ? 'browser' : 'browsers'} connected</footer>
         </> : <EmptyState connected={data.sources.length > 0} openHelp={() => setShowHelp(true)} openFolder={() => desk?.openExtensionFolder()} />}
       </main>
 
-      {showHelp && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowHelp(false); }}><div className="help-modal" role="dialog" aria-modal="true" aria-label="Connect a browser"><button className="modal-close" onClick={() => setShowHelp(false)} aria-label="Close"><X size={18} /></button><div className="modal-icon"><FolderOpen size={22} /></div><h2>Connect your browser</h2><p className="modal-intro">Add the connector to each Chrome, Edge, Brave, or other Chromium profile you want to track.</p><ol className="steps"><li><span>01</span><p>Open <strong>chrome://extensions</strong> (or <strong>edge://extensions</strong>) and turn on <strong>Developer mode</strong>.</p></li><li><span>02</span><p>Click <strong>Load unpacked</strong> and select the extension folder.</p></li><li><span>03</span><p>Leave this app open. Tabs from every window and virtual desktop will appear automatically.</p></li></ol><button className="primary-button" onClick={() => desk?.openExtensionFolder()}><FolderOpen size={17} /> Open extension folder <ArrowUpRight size={16} /></button><div className="modal-note">Your data stays on this computer. The connector only talks to the local app.</div></div></div>}
+      {showHelp && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowHelp(false); }}><div className="help-modal" role="dialog" aria-modal="true" aria-label="Connect a browser"><button className="modal-close" onClick={() => setShowHelp(false)} aria-label="Close"><X size={18} /></button><div className="modal-icon"><FolderOpen size={22} /></div><h2>Connect your browser</h2><p className="modal-intro">Add the connector to each Chrome, Edge, Brave, or other Chromium profile you want to track.</p><ol className="steps"><li><span>01</span><p>Open <strong>chrome://extensions</strong> (or <strong>edge://extensions</strong>) and turn on <strong>Developer mode</strong>.</p></li><li><span>02</span><p>Click <strong>Load unpacked</strong> and select the extension folder.</p></li><li><span>03</span><p>Leave this app open. Tabs from every window and virtual desktop will appear automatically.</p></li><li><span>04</span><p>For another computer, enable <strong>Allow local network</strong> in Remote control. In that browser’s connector options, paste the <strong>browser connector address</strong> and <strong>Bearer token</strong>, name the device, then click <strong>Save & connect</strong>.</p></li></ol><button className="primary-button" onClick={() => desk?.openExtensionFolder()}><FolderOpen size={17} /> Open extension folder <ArrowUpRight size={16} /></button><div className="modal-note">Browser and device source tags are added automatically. Click the connector’s toolbar icon to change its settings.</div></div></div>}
       {showRemote && <RemoteModal settings={data.webhook || emptyWebhook} desk={desk} close={() => setShowRemote(false)} />}
     </div>
   );
@@ -369,7 +387,7 @@ function RemoteModal({ settings, desk, close }) {
       <button className="modal-close" onClick={close} aria-label="Close"><X size={18} /></button>
       <div className="modal-icon"><Radio size={21} /></div>
       <h2>Remote control</h2>
-      <p className="modal-intro">Send authenticated HTTP commands to organize tabs and control the app from another device.</p>
+      <p className="modal-intro">Connect browsers from another computer, or send authenticated commands to organize your tabs.</p>
       <div className="remote-status"><span className={`status-dot ${settings.running ? 'online' : ''}`} /><strong>{settings.running ? 'Listening' : settings.enabled ? 'Unavailable' : 'Off'}</strong><span>{settings.running ? (settings.lan ? 'Local network' : 'This computer') : ''}</span></div>
       {(settings.error || error) && <div className="remote-error">{error || settings.error}</div>}
       <label className="remote-setting"><span><strong>Enable webhook</strong><small>Accept API requests while the app is open</small></span><input type="checkbox" aria-label="Enable webhook" checked={settings.enabled} disabled={busy} onChange={(event) => changeSettings({ enabled: event.target.checked })} /></label>
@@ -378,6 +396,10 @@ function RemoteModal({ settings, desk, close }) {
       <div className="remote-field-label">ENDPOINT</div>
       <div className="remote-value"><code>{settings.localUrl}/webhook</code><button onClick={() => copy(`${settings.localUrl}/webhook`, 'endpoint')} aria-label="Copy endpoint"><Copy size={15} /></button></div>
       {settings.lan && settings.lanUrls.map((url) => <div className="remote-value" key={url}><code>{url}/webhook</code><button onClick={() => copy(`${url}/webhook`, 'endpoint')} aria-label={`Copy ${url} endpoint`}><Copy size={15} /></button></div>)}
+      <div className="remote-field-label">BROWSER CONNECTOR ADDRESS</div>
+      <div className="remote-value"><code>{settings.connectorUrl || settings.localUrl.replace('http:', 'ws:') + '/connector'}</code><button onClick={() => copy(settings.connectorUrl || settings.localUrl.replace('http:', 'ws:') + '/connector', 'connector address')} aria-label="Copy local connector address"><Copy size={15} /></button></div>
+      {settings.lan && (settings.connectorLanUrls || settings.lanUrls.map((url) => url.replace('http:', 'ws:') + '/connector')).map((url) => <div className="remote-value" key={url}><code>{url}</code><button onClick={() => copy(url, 'connector address')} aria-label={`Copy ${url} connector address`}><Copy size={15} /></button></div>)}
+      <p className="connector-hint">Paste the network address and token into the connector options in your other browser. Add a device or profile name to identify its tabs.</p>
       <div className="remote-field-label">BEARER TOKEN</div>
       <div className="remote-value"><code>{visible ? token : '••••••••••••••••••••••••••••••••'}</code><button onClick={() => setVisible(!visible)} aria-label={visible ? 'Hide token' : 'Show token'}>{visible ? <EyeOff size={15} /> : <Eye size={15} />}</button><button onClick={() => copy(token, 'token')} aria-label="Copy token"><Copy size={15} /></button></div>
       <div className="remote-bottom"><button className="rotate-token" onClick={rotate}><RotateCw size={14} /> Rotate token</button>{copied && <span>Copied {copied}</span>}</div>
@@ -546,14 +568,14 @@ function FoldersView({ sections, folders, metadata, update, desk, collapsedIds, 
 }
 
 function NavItem({ icon: Icon, label, count, active, onClick }) {
-  return <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}><Icon size={17} strokeWidth={active ? 2.3 : 1.9} /><span>{label}</span><span className="nav-count">{count}</span></button>;
+  return <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick} title={label}><Icon size={17} strokeWidth={active ? 2.3 : 1.9} /><span>{label}</span><span className="nav-count">{count}</span></button>;
 }
 
 function EmptyState({ connected, openHelp, openFolder }) {
   return <div className="empty-area"><div className="empty-illustration"><div className="empty-back" /><div className="empty-front"><Play size={23} fill="currentColor" /></div><div className="empty-line one" /><div className="empty-line two" /></div><h2>{connected ? 'No YouTube tabs open' : 'Your tabs, all together.'}</h2><p>{connected ? 'Open a YouTube page in your connected browser. It will show up here automatically.' : 'Connect your browser once to see every YouTube tab across your windows and virtual desktops.'}</p>{!connected && <div className="empty-actions"><button className="primary-button" onClick={openFolder}><FolderOpen size={17} /> Open extension folder</button><button className="text-button" onClick={openHelp}>How to connect <ArrowUpRight size={16} /></button></div>}</div>;
 }
 
-function TabRow({ tab, meta, update, focus, refreshDuration, selected, onSelect, dragProps }) {
+function TabRow({ tab, meta, update, focus, refreshDuration, selectSource, selected, onSelect, dragProps }) {
   const [editing, setEditing] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [imageFailed, setImageFailed] = useState(false);
@@ -578,7 +600,19 @@ function TabRow({ tab, meta, update, focus, refreshDuration, selected, onSelect,
   return <article className={`tab-row ${dragProps ? 'draggable-row' : ''} ${selected ? 'tab-selected' : ''} ${dragProps?.indicator ? `tab-drop-${dragProps.indicator}` : ''}`} role="option" aria-selected={selected} draggable={Boolean(dragProps)} onClick={onSelect} onDragStart={dragProps?.onDragStart} onDragEnd={dragProps?.onDragEnd} onDragOver={dragProps?.onDragOver} onDrop={dragProps?.onDrop}>
     {dragProps && <button className="tab-grip" title="Drag to reorder or move; arrow keys reorder" aria-label={`Reorder ${cleanTitle(tab.title)}`} onKeyDown={dragProps.onKeyDown}><GripVertical size={17} /></button>}
     <button className={`thumbnail ${!tab.video || imageFailed ? 'thumbnail-placeholder' : ''}`} onClick={focus} aria-label={`Switch to ${cleanTitle(tab.title)}`} title="Switch to tab">{tab.video && !imageFailed ? <img src={`https://i.ytimg.com/vi/${tab.video}/mqdefault.jpg`} alt="" loading="lazy" onError={() => setImageFailed(true)} /> : <Play size={23} fill="currentColor" />}</button>
-      <div className="tab-info"><button className="tab-title" onClick={focus} title={cleanTitle(tab.title)}>{cleanTitle(tab.title)} <ArrowUpRight size={14} /></button><div className="tab-meta"><span>{tab.browser}</span><span className="meta-separator">·</span><span>Window {tab.windowNumber}</span>{tab.active && <><span className="meta-separator">·</span><span className="active-label">Active tab</span></>}<span className="meta-separator">·</span>{Number.isFinite(meta.duration) ? <span className="duration-label">{formatDuration(meta.duration)}</span> : <button className="duration-refresh" onClick={refreshVideoDuration} disabled={refreshingDuration} title="Refresh video duration">{refreshingDuration ? 'Refreshing...' : 'Duration unavailable'}</button>}</div><div className="tag-line">{tags.map((tag) => <span className="tag-chip" key={tag}><Hash size={11} />{tag}<button onClick={() => update(tab.key, { tags: tags.filter((item) => item !== tag) })} aria-label={`Remove ${tag} tag`}><X size={12} /></button></span>)}{editing ? <form className="tag-form" onSubmit={addTag}><input autoFocus value={tagInput} onChange={(event) => setTagInput(event.target.value)} maxLength={32} placeholder="Tag name" aria-label="New tag name" onKeyDown={(event) => { if (event.key === 'Escape') setEditing(false); }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setEditing(false); }} /><button type="submit" aria-label="Add tag"><Check size={14} /></button></form> : <button className="add-tag" onClick={() => setEditing(true)}><Plus size={13} /> Tag</button>}</div></div>
+    <div className="tab-info">
+      <button className="tab-title" onClick={focus} title={cleanTitle(tab.title)}>{cleanTitle(tab.title)} <ArrowUpRight size={14} /></button>
+      <div className="tab-meta"><span>{tab.browser}</span><span className="meta-separator">·</span><span>Window {tab.windowNumber}</span>{tab.active && <><span className="meta-separator">·</span><span className="active-label">Active tab</span></>}<span className="meta-separator">·</span>{Number.isFinite(meta.duration) ? <span className="duration-label">{formatDuration(meta.duration)}</span> : <button className="duration-refresh" onClick={refreshVideoDuration} disabled={refreshingDuration} title="Refresh video duration">{refreshingDuration ? 'Refreshing...' : 'Duration unavailable'}</button>}</div>
+      <div className="tag-line">
+        <span className={`source-chip ${tab.remote ? 'remote-source' : ''}`} title={`Browser: ${tab.browser} · Source: ${tab.sourceLabel}`}>
+          {tab.remote ? <Radio size={11} /> : <Monitor size={11} />}
+          {selectSource ? <button onClick={selectSource} aria-label={`Show tabs from ${tab.sourceLabel}`}>{tab.deviceName}{tab.profileName ? ` · ${tab.profileName}` : ''}</button> : <span>{tab.deviceName}{tab.profileName ? ` · ${tab.profileName}` : ''}</span>}
+        </span>
+        <span className={`connection-chip ${tab.remote ? 'is-remote' : ''}`}>{tab.remote ? 'Remote' : 'Local'}</span>
+        {tags.map((tag) => <span className="tag-chip" key={tag}><Hash size={11} />{tag}<button onClick={() => update(tab.key, { tags: tags.filter((item) => item !== tag) })} aria-label={`Remove ${tag} tag`}><X size={12} /></button></span>)}
+        {editing ? <form className="tag-form" onSubmit={addTag}><input autoFocus value={tagInput} onChange={(event) => setTagInput(event.target.value)} maxLength={32} placeholder="Tag name" aria-label="New tag name" onKeyDown={(event) => { if (event.key === 'Escape') setEditing(false); }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setEditing(false); }} /><button type="submit" aria-label="Add tag"><Check size={14} /></button></form> : <button className="add-tag" onClick={() => setEditing(true)}><Plus size={13} /> Tag</button>}
+      </div>
+    </div>
     <div className="row-actions"><button className={`priority-button ${meta.priority ? 'selected' : ''}`} onClick={() => update(tab.key, { priority: !meta.priority })} aria-label={meta.priority ? 'Remove high priority' : 'Mark high priority'} title={meta.priority ? 'Remove high priority' : 'Mark high priority'}><Star size={18} fill={meta.priority ? 'currentColor' : 'none'} /></button><button className={`watched-button ${meta.watched ? 'is-watched' : ''}`} onClick={() => update(tab.key, { watched: !meta.watched })} aria-label={meta.watched ? 'Mark unwatched' : 'Mark watched'}><span className="watch-check"><Check size={13} strokeWidth={3} /></span>{meta.watched ? 'Watched' : 'Mark watched'}</button></div>
   </article>;
 }

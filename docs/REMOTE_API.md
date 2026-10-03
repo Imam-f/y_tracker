@@ -9,9 +9,17 @@ YouTube Tab Desk accepts **inbound HTTP webhook commands** while the desktop app
 3. Copy the **Bearer token** from the modal. Every endpoint, including health and CSV export, requires it.
 4. For access from another device on the same network, turn on **Allow local network** and use one of the displayed network URLs. If your OS firewall prompts you, allow the app on the network you intend to use. You can change the port in the same modal (range 1024–65535).
 
-The base URL is `http://127.0.0.1:17350` locally, or `http://<computer-LAN-IP>:17350` when LAN access is enabled. The modal shows the current addresses. The browser connector uses a *different* local WebSocket port (`17349`); do not send API requests there.
+The base URL is `http://127.0.0.1:17350` locally, or `http://<computer-LAN-IP>:17350` when LAN access is enabled. The modal shows the current addresses. The default local browser connector uses a separate WebSocket port (`17349`); do not send API requests there. Authenticated network connectors use `/connector` on the HTTP server's configured port.
 
 Settings and the random 256-bit token are saved in `webhook.json` in the app's user-data directory. Turning the webhook off stops the HTTP listener; rotating the token immediately rejects the old token. Requests use plain HTTP, so use a trusted local network or put an HTTPS reverse proxy/tunnel in front of the app when accessing it over an untrusted network. Do not place the token in a URL or share it with a browser page.
+
+## Browser connectors from another computer
+
+Enable **Allow local network** and copy a **Browser connector address** from Remote control, such as `ws://192.168.1.42:17350/connector`. Install the connector on the other computer, click its toolbar icon, and enter that address, the Bearer token, a device name, and an optional profile/browser name. **Save & connect** asks for permission to reach that host and displays connection status. An HTTPS reverse proxy must support WebSocket upgrades; use a `wss://` address with it.
+
+The connector sends the token in its initial WebSocket `hello` message, never in the URL. Unauthenticated sessions cannot register a source or update tabs. Token rotation disconnects authenticated connectors immediately; update their saved tokens to reconnect. Changing the remote-control port, disabling it, or changing LAN access also disconnects connectors on that listener. The local `ws://127.0.0.1:17349` connector continues to work independently without a token.
+
+Sources report `deviceName`, `profileName`, and `remote`. The app determines `remote` from the connection's peer address, so loopback connections are Local and network connections are Remote. Each tab also reports `sourceLabel` (device plus profile or browser). Source badges are separate from editable user tags. Browser connections sync their current open tabs, watched playback, and duration, and receive focus commands for their own tabs. Tabs disappear while a source is disconnected; saved folder placements return when that profile reconnects.
 
 ## Request conventions
 
@@ -54,7 +62,7 @@ curl -H "Authorization: Bearer $TABDESK_TOKEN" \
   http://127.0.0.1:17350/api/v1/export.csv -o youtube-tabs.csv
 ```
 
-The CSV has a UTF-8 BOM and columns `Folder`, `Position`, `Title`, `URL`, `Browser`, `Duration`, `Watched`, `High priority`, `Tags`. Tags are joined with `; `. It includes every *open* tab even when the desktop app is showing a filtered view. Spreadsheet-style formula prefixes in cells are escaped.
+The CSV has a UTF-8 BOM and columns `Folder`, `Position`, `Title`, `URL`, `Browser`, `Source`, `Device`, `Remote`, `Duration`, `Watched`, `High priority`, `Tags`. Tags are joined with `; `. It includes every *open* tab even when the desktop app is showing a filtered view. Spreadsheet-style formula prefixes in cells are escaped.
 
 ### Snapshot shape
 
@@ -63,7 +71,7 @@ The CSV has a UTF-8 BOM and columns `Folder`, `Position`, `Title`, `URL`, `Brows
   "ok": true,
   "data": {
     "sources": [
-      { "id": "browser-profile-uuid", "name": "Chrome / Chromium", "tabCount": 1 }
+      { "id": "browser-profile-uuid", "name": "Chrome / Chromium", "deviceName": "Work laptop", "profileName": "Personal", "remote": true, "tabCount": 1 }
     ],
     "folders": [
       { "id": "folder-uuid", "name": "Watch next", "tabCount": 1 },
@@ -76,6 +84,10 @@ The CSV has a UTF-8 BOM and columns `Folder`, `Position`, `Title`, `URL`, `Brows
         "tabId": 123,
         "windowId": 7,
         "browser": "Chrome / Chromium",
+        "deviceName": "Work laptop",
+        "profileName": "Personal",
+        "sourceLabel": "Work laptop · Personal",
+        "remote": true,
         "title": "Example - YouTube",
         "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         "active": false,

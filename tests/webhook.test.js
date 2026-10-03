@@ -4,7 +4,7 @@ import { createWebhookServer, publicSnapshot } from '../electron/webhook.js';
 
 test('authenticated webhook exposes ordered tabs, CSV, and validates commands', async (t) => {
   const tab = { id: 101, slotId: 'slot-a', windowId: 4, title: 'A "test" - YouTube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', active: true };
-  const sources = new Map([['profile', { id: 'profile', name: 'Chrome', tabs: [tab] }]]);
+  const sources = new Map([['profile', { id: 'profile', name: 'Chrome', deviceName: 'Laptop', profileName: 'Personal', remote: true, tabs: [tab] }]]);
   const metadata = { 'video:dQw4w9WgXcQ': { watched: true, priority: false, tags: ['later'], duration: 213 } };
   const organization = { folders: [{ id: 'folder-a', name: 'Research' }], order: { 'folder-a': ['slot-a'], unfiled: [] } };
   let token = 'a'.repeat(64);
@@ -35,12 +35,18 @@ test('authenticated webhook exposes ordered tabs, CSV, and validates commands', 
   assert.equal(snapshot.tabs[0].metadataKey, 'video:dQw4w9WgXcQ');
   assert.equal(snapshot.tabs[0].position, 1);
   assert.equal(snapshot.tabs[0].durationSeconds, 213);
+  assert.equal(snapshot.tabs[0].sourceLabel, 'Laptop · Personal');
+  assert.equal(snapshot.tabs[0].remote, true);
+  assert.equal(snapshot.sources[0].deviceName, 'Laptop');
   assert.deepEqual(snapshot.totals, { tabs: 1, folders: 1, sources: 1 });
 
   const csv = await fetch(`${base}/api/v1/export.csv`, { headers });
   assert.equal(csv.status, 200);
   assert.match(csv.headers.get('content-type'), /text\/csv/);
-  assert.match(await csv.text(), /"Research","1","A ""test"""/);
+  const csvText = await csv.text();
+  assert.match(csvText, /"Research","1","A ""test"""/);
+  assert.match(csvText, /"Source","Device","Remote"/);
+  assert.match(csvText, /"Chrome","Laptop · Personal","Laptop","Yes"/);
 
   const success = await command({ action: 'set_metadata', slotId: 'slot-a', watched: false, tags: [] });
   assert.equal(success.status, 200);

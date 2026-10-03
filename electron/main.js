@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import { execFile } from 'node:child_process';
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocket } from 'ws';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createOrganization, reconcileTabs, createFolder, renameFolder, deleteFolder, moveFolder, moveTab } from './organization.js';
 import { makeCsv } from './export.js';
 import { ApiError, createWebhookServer, metadataKey, publicSnapshot } from './webhook.js';
+import { attachNetworkConnector, createConnectorServer } from './connector.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 17349;
@@ -23,6 +24,7 @@ let serverError = '';
 let webhookFile;
 let webhookConfig = { enabled: true, lan: false, port: 17350, token: '' };
 let webhookServer;
+let networkConnector;
 let webhookRunning = false;
 let webhookError = '';
 const durationLookups = new Set();
@@ -69,7 +71,7 @@ if (!app.requestSingleInstanceLock()) {
 
 function state() {
   return {
-    sources: Array.from(sources.values(), ({ id, name, tabs }) => ({ id, name, tabs })),
+    sources: Array.from(sources.values(), ({ id, name, deviceName, profileName, remote, tabs }) => ({ id, name, deviceName, profileName, remote, tabs })),
     metadata,
     organization,
     webhook: webhookStatus(),
@@ -93,6 +95,8 @@ function webhookStatus() {
     running: webhookRunning,
     error: webhookError,
     localUrl: `http://127.0.0.1:${webhookConfig.port}`,
+    connectorUrl: `ws://127.0.0.1:${webhookConfig.port}/connector`,
+    connectorLanUrls: [...new Set(lanUrls)].map((url) => url.replace('http:', 'ws:') + '/connector'),
     lanUrls: [...new Set(lanUrls)]
   };
 }
@@ -101,75 +105,29 @@ function publish() {
   if (window && !window.isDestroyed()) window.webContents.send('state', state());
 }
 
+function connectorOptions() {
+  return {
+    sources, getDeviceName: () => os.hostname(), onChange: publish,
+    onSnapshot: (source, tabs) => {
+      const reconciled = reconcileTabs(organization, source.id, tabs);
+      source.tabs = reconciled.tabs;
+      if (reconciled.changed) saveOrganization();
+      publish();
+      lookupDurations(source.tabs);
+    },
+    onWatched: (videoId) => {
+      const key = `video:${videoId}`;
+      if (!metadata[key]?.watched) updateMeta(key, { watched: true });
+    },
+    onDuration: (videoId, duration) => updateMeta(`video:${videoId}`, { duration })
+  };
+}
+
 function startServer() {
-  server = new WebSocketServer({ host: '127.0.0.1', port: PORT });
+  server = createConnectorServer({ ...connectorOptions(), host: '127.0.0.1', port: PORT });
   server.on('error', (error) => {
     serverError = `Local connection unavailable: ${error.message}`;
     publish();
-  });
-
-  server.on('connection', (socket) => {
-    let sourceId = null;
-
-    socket.on('message', (bytes) => {
-      let message;
-      try { message = JSON.parse(bytes.toString()); } catch { return; }
-
-      if (message.type === 'hello' && typeof message.id === 'string' && message.id.length <= 100) {
-        sourceId = message.id;
-        const existing = sources.get(sourceId);
-        if (existing && existing.socket !== socket) existing.socket.close();
-        sources.set(sourceId, {
-          id: sourceId,
-          name: typeof message.name === 'string' ? message.name.slice(0, 60) : 'Browser',
-          tabs: [],
-          socket
-        });
-        publish();
-      }
-
-      if (!sourceId || sources.get(sourceId)?.socket !== socket) return;
-
-      if (message.type === 'snapshot' && Array.isArray(message.tabs)) {
-        const source = sources.get(sourceId);
-        const validTabs = message.tabs.slice(0, 2000).filter((tab) => {
-          if (!Number.isInteger(tab.id) || !Number.isInteger(tab.windowId) || typeof tab.url !== 'string') return false;
-          try {
-            const host = new URL(tab.url).hostname;
-            return host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be';
-          } catch { return false; }
-        }).map((tab) => ({
-          id: tab.id,
-          windowId: tab.windowId,
-          url: tab.url.slice(0, 2048),
-          title: String(tab.title || 'YouTube').slice(0, 300),
-          active: Boolean(tab.active)
-        }));
-        const reconciled = reconcileTabs(organization, sourceId, validTabs);
-        source.tabs = reconciled.tabs;
-        if (reconciled.changed) saveOrganization();
-        publish();
-        lookupDurations(source.tabs);
-      }
-
-      if (message.type === 'watched' && typeof message.videoId === 'string' && /^[\w-]{11}$/.test(message.videoId)) {
-        const key = `video:${message.videoId}`;
-        if (!metadata[key]?.watched) updateMeta(key, { watched: true });
-      }
-
-      if (message.type === 'duration' && typeof message.videoId === 'string' && /^[\w-]{11}$/.test(message.videoId) &&
-        Number.isFinite(message.duration) && message.duration > 0 && message.duration <= 86400) {
-        updateMeta(`video:${message.videoId}`, { duration: message.duration });
-      }
-    });
-
-    socket.on('close', () => {
-      if (sourceId && sources.get(sourceId)?.socket === socket) {
-        sources.delete(sourceId);
-        publish();
-      }
-    });
-    socket.on('error', () => {});
   });
 }
 
@@ -265,6 +223,9 @@ async function stopWebhook() {
   const previous = webhookServer;
   webhookServer = undefined;
   webhookRunning = false;
+  for (const socket of networkConnector?.clients || []) socket.terminate();
+  networkConnector?.close();
+  networkConnector = undefined;
   await new Promise((resolve) => previous.close(resolve));
 }
 
@@ -288,6 +249,7 @@ async function startWebhook(settings) {
     });
   });
   webhookServer = instance;
+  networkConnector = attachNetworkConnector(instance, { ...connectorOptions(), getToken: () => webhookConfig.token });
   webhookRunning = true;
   webhookError = '';
   instance.on('error', (error) => {
@@ -414,6 +376,7 @@ ipcMain.handle('get-webhook-secret', () => webhookConfig.token);
 ipcMain.handle('set-webhook-settings', (_event, patch) => updateWebhookSettings(patch));
 ipcMain.handle('rotate-webhook-secret', () => {
   webhookConfig.token = randomBytes(32).toString('hex');
+  for (const socket of networkConnector?.clients || []) socket.close(1008, 'Access token rotated');
   saveWebhookConfig();
   return webhookConfig.token;
 });

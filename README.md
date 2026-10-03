@@ -6,7 +6,9 @@ YouTube Tab Desk is a small Windows desktop app for turning a browser full of Yo
 
 ## Features
 
-- Track open YouTube tabs across browser windows and profiles.
+- Track open YouTube tabs across browser windows, profiles, and computers on your local network.
+- Identify each tab with browser/device source tags and Local or Remote badges.
+- Filter or group tabs by source, and search by device or profile name.
 - Filter tabs by watched status, priority, search text, or tag.
 - Organize tabs into folders with drag-and-drop reordering.
 - Persist labels, folders, and watch state locally between restarts.
@@ -32,7 +34,19 @@ Then install the connector in each browser profile you want to track:
 2. Enable **Developer mode**.
 3. Choose **Load unpacked** and select this project's `extension` folder.
 
-The app's **Open extension folder** action opens the correct folder for you. The connector communicates with the desktop app only over `127.0.0.1:17349`, so the app must be running for tabs to appear.
+The app's **Open extension folder** action opens the correct folder for you. By default, the connector communicates with the desktop app over `127.0.0.1:17349`, so the app must be running for tabs to appear. Each installed browser profile has its own persistent source ID; tabs from different browsers are collected together automatically.
+
+### Connect a browser on another computer
+
+1. On the receiving computer, open **Remote control**, keep **Enable webhook** on, and enable **Allow local network**.
+2. Copy a network **Browser connector address** (for example, `ws://192.168.1.42:17350/connector`) and the **Bearer token**.
+3. Copy the `extension` folder to the other computer and install it in the browser profile using the steps above.
+4. Click the connector's toolbar icon to open its options. Paste the address and token, enter a **Device name**, and optionally enter a **Profile name** or override the browser name (useful for Brave).
+5. Click **Save & connect** and grant access to the receiving host. The options page shows the connection status.
+
+Every tab receives a source tag and a Local or Remote badge. Use **Sources** in the sidebar or **Group by → Source** to view a specific browser profile. Clicking a tab focuses it in its originating browser, including on the other computer. Watch state and user tags are shared for the same video, while folder placements stay separate for each tab instance. Disconnected sources disappear from the open-tab list and restore their placements when they reconnect.
+
+Network connections use the existing remote-control port and token. Turning remote control off disconnects those connectors; rotating the token requires updating it in their options. The default local connector remains available independently. See the [remote API reference](docs/REMOTE_API.md) for network setup details.
 
 ## Organizing Tabs
 
@@ -58,10 +72,10 @@ npm run dist   # Build the Windows installer
 
 ## TODO
 
-- [ ] Add support for multiple browsers and devices.
-    - [ ] Add source device tag
-    - [ ] Add add_device functionality
-    - [ ] Make the sync engine
+- [x] Add support for multiple browsers and devices.
+    - [x] Add source device tag
+    - [x] Configure a connector for another device
+    - [x] Sync tabs, watch progress, and tab focus to the receiving app
 
 ## License
 
