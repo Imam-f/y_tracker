@@ -54,6 +54,8 @@ Use the sidebar to switch between all, unwatched, watched, and priority tabs. Ad
 
 Open **Folders** to create folders and drag tabs between them. Tabs without a folder appear in **Unfiled**. Deleting a folder moves its tabs to Unfiled. Folder placements follow a tab through app restarts, and restored browser tabs are matched by browser profile and URL.
 
+Click a row's background to select it, use **Ctrl+click** to select multiple tabs, or **Shift+click** to select a range within a folder. Drag any selected row to a folder heading (including a collapsed folder) or its empty area to move the whole selection. Drop between rows to choose its position; selected tabs keep their displayed order.
+
 ![Folders and watch queue](docs/screenshots/folders.png)
 
 ## Remote Control

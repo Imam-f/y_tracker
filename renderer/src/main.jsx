@@ -6,6 +6,7 @@ import {
   FolderPlus, LayoutGrid, ListFilter, Monitor, Pencil, Play, Plus, Radio, RotateCw, Search, Star, Trash2, X
 } from 'lucide-react';
 import './styles.css';
+import { moveTabs } from '../../electron/tab-order.js';
 
 const emptyOrganization = { folders: [], order: { unfiled: [] }, records: {} };
 const emptyWebhook = { enabled: true, lan: false, port: 17350, running: false, error: '', localUrl: 'http://127.0.0.1:17350', lanUrls: [] };
@@ -78,11 +79,11 @@ const demoDesk = {
     publishDemo(); return true;
   },
   moveTab: async (slotId, folderId, beforeId) => {
-    const order = sampleState.organization.order;
-    if (!order[folderId] || slotId === beforeId) return false;
-    Object.values(order).forEach((ids) => { const index = ids.indexOf(slotId); if (index >= 0) ids.splice(index, 1); });
-    const index = order[folderId].indexOf(beforeId);
-    order[folderId].splice(index < 0 ? order[folderId].length : index, 0, slotId);
+    if (slotId === beforeId || !moveTabs(sampleState.organization, [slotId], folderId, beforeId)) return false;
+    publishDemo(); return true;
+  },
+  moveTabs: async (slotIds, folderId, beforeId) => {
+    if (!moveTabs(sampleState.organization, slotIds, folderId, beforeId)) return false;
     publishDemo(); return true;
   },
   exportList: async (rows) => {
@@ -500,7 +501,9 @@ function FoldersView({ sections, folders, metadata, update, desk, collapsedIds, 
       setSelectionAnchor({ sectionId: null, index: null });
     }
     event.dataTransfer.effectAllowed = 'move';
-    const draggedIds = selectedIds.has(tab.slotId) ? [...selectedIds] : [tab.slotId];
+    const draggedIds = selectedIds.has(tab.slotId)
+      ? sections.flatMap((section) => section.items.filter((item) => selectedIds.has(item.slotId)).map((item) => item.slotId))
+      : [tab.slotId];
     event.dataTransfer.setData('application/x-tabdesk-tab', tab.slotId);
     event.dataTransfer.setData('application/x-tabdesk-tabs', JSON.stringify(draggedIds));
     event.dataTransfer.setData('text/plain', tab.url);
@@ -512,7 +515,31 @@ function FoldersView({ sections, folders, metadata, update, desk, collapsedIds, 
     event.dataTransfer.setData('text/plain', id);
   }
 
-  function accepts(event, type) { return event.dataTransfer.types.includes(`application/x-tabdesk-${type}`); }
+  function accepts(event, type) {
+    return event.dataTransfer.types.includes(`application/x-tabdesk-${type}`) ||
+      (type === 'tab' && event.dataTransfer.types.includes('application/x-tabdesk-tabs'));
+  }
+
+  function draggedTabIds(event) {
+    const rawIds = event.dataTransfer.getData('application/x-tabdesk-tabs');
+    try {
+      const ids = rawIds ? JSON.parse(rawIds) : [event.dataTransfer.getData('application/x-tabdesk-tab')];
+      const availableIds = new Set(sections.flatMap((section) => section.items.map((tab) => tab.slotId)));
+      if (!Array.isArray(ids) || ids.some((id) => !availableIds.has(id))) return [];
+      return [...new Set(ids)];
+    } catch { return []; }
+  }
+
+  async function dropTabs(event, section, beforeId = null) {
+    event.preventDefault(); event.stopPropagation();
+    const ids = draggedTabIds(event);
+    clearDrag();
+    if (!ids.length) return;
+    try {
+      if (!await desk?.moveTabs(ids, section.id, beforeId)) throw new Error('Move failed');
+      setFolderError('');
+    } catch { setFolderError('Could not move the selected tabs. Please try again.'); }
+  }
 
   function rowDragOver(event, tab) {
     if (!accepts(event, 'tab')) return;
@@ -522,17 +549,11 @@ function FoldersView({ sections, folders, metadata, update, desk, collapsedIds, 
     setOver({ type: 'tab', id: tab.slotId, edge: event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after' });
   }
 
-  async function rowDrop(event, tab, index, section) {
+  function rowDrop(event, tab, index, section) {
     if (!accepts(event, 'tab')) return;
-    event.preventDefault(); event.stopPropagation();
-    const rawIds = event.dataTransfer.getData('application/x-tabdesk-tabs');
-    let slotIds = [event.dataTransfer.getData('application/x-tabdesk-tab')];
-    try { if (rawIds) slotIds = JSON.parse(rawIds); } catch { /* Ignore malformed drag data. */ }
     const bounds = event.currentTarget.getBoundingClientRect();
     const beforeId = event.clientY < bounds.top + bounds.height / 2 ? tab.slotId : section.items[index + 1]?.slotId || null;
-    const movedIds = slotIds.filter((id) => id && id !== tab.slotId).reverse();
-    for (const id of movedIds) await desk?.moveTab(id, section.id, beforeId);
-    clearDrag();
+    dropTabs(event, section, beforeId);
   }
 
   function headerDragOver(event, section, index) {
@@ -559,8 +580,9 @@ function FoldersView({ sections, folders, metadata, update, desk, collapsedIds, 
      {sections.map((section, index) => {
       const unfiled = section.id === 'unfiled';
        return <section className={`folder-section ${over?.type === 'section' && over.id === section.id ? 'folder-drop-target' : ''} ${over?.type === 'folder' && over.id === section.id ? `folder-drop-${over.edge}` : ''}`} style={{ marginLeft: `${Math.min(section.depth || 0, 6) * 24}px` }} key={section.id}
-        onDragOver={(event) => { if (accepts(event, 'tab')) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setOver({ type: 'section', id: section.id }); } }}
-        onDrop={(event) => { if (accepts(event, 'tab')) { event.preventDefault(); desk?.moveTab(event.dataTransfer.getData('application/x-tabdesk-tab'), section.id, null); clearDrag(); } }}
+        onDragOver={(event) => { if (accepts(event, 'tab')) { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move'; setOver({ type: 'section', id: section.id }); } }}
+        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) clearDrag(); }}
+        onDrop={(event) => { if (accepts(event, 'tab')) dropTabs(event, section); }}
         onDragEnd={clearDrag}>
         <div className="folder-heading" role="button" tabIndex={0} aria-expanded={!collapsedIds.has(section.id)} onClick={(event) => { if (!event.target.closest('button, input, form')) toggleFolder(section.id); }} onKeyDown={(event) => { if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button, input, form')) { event.preventDefault(); toggleFolder(section.id); } }} onDragOver={(event) => headerDragOver(event, section, index)} onDrop={(event) => headerDrop(event, section, index)}>
           <ChevronDown className={`folder-collapse-icon ${collapsedIds.has(section.id) ? 'is-collapsed' : ''}`} size={15} aria-hidden="true" />
@@ -570,7 +592,7 @@ function FoldersView({ sections, folders, metadata, update, desk, collapsedIds, 
           <div className="folder-spacer" />
            {!unfiled && <div className="folder-controls"><button title="New subfolder" aria-label={`New subfolder in ${section.name}`} onClick={() => { setCreating(true); setCreatingParentId(section.id); setNewName(''); setFolderError(''); }}><FolderPlus size={15} /></button><button title="Rename folder" aria-label={`Rename ${section.name}`} onClick={() => { setEditingId(section.id); setEditName(section.name); setFolderError(''); }}><Pencil size={15} /></button><button title="Delete folder; tabs move to Unfiled" aria-label={`Delete ${section.name}`} onClick={() => desk?.deleteFolder(section.id)}><Trash2 size={15} /></button><button className="folder-grip" draggable onDragStart={(event) => startFolderDrag(event, section.id)} onDragEnd={clearDrag} onKeyDown={(event) => { if (event.key === 'ArrowUp' && index > 0) { event.preventDefault(); desk?.moveFolder(section.id, folders[index - 1].id); } if (event.key === 'ArrowDown' && index < folders.length - 1) { event.preventDefault(); desk?.moveFolder(section.id, folders[index + 2]?.id || null); } }} title="Drag to reorder folders; arrow keys also work" aria-label={`Reorder ${section.name}`}><GripVertical size={17} /></button></div>}
         </div>
-           {!collapsedIds.has(section.id) && (section.items.length ? <div className="folder-tab-list" role="listbox" aria-label={`${section.name} tabs`}>{section.items.map((tab, tabIndex) => <TabRow key={tab.slotId} tab={tab} meta={metadata[tab.key] || {}} update={update} focus={() => desk?.focusTab(tab.sourceId, tab.id)} refreshDuration={() => desk?.refreshDuration(tab.url)} selected={selectedIds.has(tab.slotId)} onSelect={(event) => selectTab(section, tabIndex, event)} dragProps={{
+           {!collapsedIds.has(section.id) && (section.items.length ? <div className="folder-tab-list" role="listbox" aria-multiselectable="true" aria-label={`${section.name} tabs`}>{section.items.map((tab, tabIndex) => <TabRow key={tab.slotId} tab={tab} meta={metadata[tab.key] || {}} update={update} focus={() => desk?.focusTab(tab.sourceId, tab.id)} refreshDuration={() => desk?.refreshDuration(tab.url)} selected={selectedIds.has(tab.slotId)} onSelect={(event) => selectTab(section, tabIndex, event)} dragProps={{
           onDragStart: (event) => startTabDrag(event, tab), onDragEnd: clearDrag,
           onDragOver: (event) => rowDragOver(event, tab),
           onDrop: (event) => rowDrop(event, tab, tabIndex, section),

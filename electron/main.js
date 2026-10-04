@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { createOrganization, reconcileTabs, createFolder, renameFolder, deleteFolder, moveFolder, moveTab } from './organization.js';
+import { createOrganization, reconcileTabs, createFolder, renameFolder, deleteFolder, moveFolder, moveTab, moveTabs } from './organization.js';
 import { makeCsv } from './export.js';
 import { ApiError, createWebhookServer, metadataKey, publicSnapshot } from './webhook.js';
 import { attachNetworkConnector, createConnectorServer } from './connector.js';
@@ -399,6 +399,7 @@ ipcMain.handle('rename-folder', (_event, id, name) => changeOrganization(() => r
 ipcMain.handle('delete-folder', (_event, id) => changeOrganization(() => deleteFolder(organization, id)));
 ipcMain.handle('move-folder', (_event, id, beforeId) => changeOrganization(() => moveFolder(organization, id, beforeId)));
 ipcMain.handle('move-tab', (_event, slotId, folderId, beforeId) => changeOrganization(() => moveTab(organization, slotId, folderId, beforeId)));
+ipcMain.handle('move-tabs', (_event, slotIds, folderId, beforeId) => changeOrganization(() => moveTabs(organization, slotIds, folderId, beforeId)));
 ipcMain.handle('export-list', async (_event, rows) => {
   if (!Array.isArray(rows) || rows.length > 2000) return false;
   const { canceled, filePath } = await dialog.showSaveDialog(window, {

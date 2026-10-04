@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('desk', {
   deleteFolder: (id) => ipcRenderer.invoke('delete-folder', id),
   moveFolder: (id, beforeId) => ipcRenderer.invoke('move-folder', id, beforeId),
   moveTab: (slotId, folderId, beforeId) => ipcRenderer.invoke('move-tab', slotId, folderId, beforeId),
+  moveTabs: (slotIds, folderId, beforeId) => ipcRenderer.invoke('move-tabs', slotIds, folderId, beforeId),
   exportList: (rows) => ipcRenderer.invoke('export-list', rows),
   focusTab: (sourceId, tabId) => ipcRenderer.invoke('focus-tab', sourceId, tabId),
   openExtensionFolder: () => ipcRenderer.invoke('open-extension-folder')

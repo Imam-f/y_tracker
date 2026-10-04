@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { moveTabs } from './tab-order.js';
+export { moveTabs } from './tab-order.js';
 
 export const UNFILED = 'unfiled';
 
@@ -84,13 +86,6 @@ export function moveFolder(organization, id, beforeId) {
 }
 
 export function moveTab(organization, slotId, folderId, beforeId) {
-  if (typeof slotId !== 'string' || !organization.records[slotId] || !organization.order[folderId] || slotId === beforeId) return false;
-  for (const entries of Object.values(organization.order)) {
-    const index = entries.indexOf(slotId);
-    if (index >= 0) entries.splice(index, 1);
-  }
-  const destination = organization.order[folderId];
-  const index = destination.indexOf(beforeId);
-  destination.splice(index < 0 ? destination.length : index, 0, slotId);
-  return true;
+  if (slotId === beforeId) return false;
+  return moveTabs(organization, [slotId], folderId, beforeId);
 }

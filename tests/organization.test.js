@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createOrganization, reconcileTabs, createFolder, moveTab, moveFolder, deleteFolder
+  createOrganization, reconcileTabs, createFolder, moveTab, moveTabs, moveFolder, deleteFolder
 } from '../electron/organization.js';
 
 test('duplicate URLs remain separate tabs when moved, reordered, and restored', () => {
@@ -47,4 +47,54 @@ test('folders support nested parents and orphan children when a parent is delete
   assert.equal(createFolder(organization, 'research', parent.id), null);
   assert.ok(deleteFolder(organization, parent.id));
   assert.equal(organization.folders.find((folder) => folder.id === child.id).parentId, null);
+});
+
+function batchFixture() {
+  const organization = createOrganization();
+  const tabs = reconcileTabs(organization, 'browser-a', [1, 2, 3, 4, 5].map((id) => ({ id, url: `https://www.youtube.com/watch?v=${id}` }))).tabs;
+  const folder = createFolder(organization, 'Destination');
+  return { organization, folder, ids: tabs.map((tab) => tab.slotId) };
+}
+
+test('a direct folder drop moves the entire batch in order, including tabs from different folders', () => {
+  const { organization, folder, ids } = batchFixture();
+  const source = createFolder(organization, 'Source');
+  moveTab(organization, ids[1], source.id, null);
+  moveTab(organization, ids[4], folder.id, null);
+  assert.ok(moveTabs(organization, [ids[0], ids[1], ids[2]], folder.id));
+  assert.deepEqual(organization.order[folder.id], [ids[4], ids[0], ids[1], ids[2]]);
+  assert.deepEqual(organization.order.unfiled, [ids[3]]);
+  assert.deepEqual(organization.order[source.id], []);
+  const restored = createOrganization(JSON.parse(JSON.stringify(organization)));
+  assert.deepEqual(restored.order, organization.order);
+});
+
+test('batch row drops preserve order before an existing tab and at the end', () => {
+  const { organization, folder, ids } = batchFixture();
+  moveTab(organization, ids[4], folder.id, null);
+  assert.ok(moveTabs(organization, [ids[0], ids[1]], folder.id, ids[4]));
+  assert.deepEqual(organization.order[folder.id], [ids[0], ids[1], ids[4]]);
+  assert.ok(moveTabs(organization, [ids[2], ids[3]], folder.id, null));
+  assert.deepEqual(organization.order[folder.id], [ids[0], ids[1], ids[4], ids[2], ids[3]]);
+});
+
+test('batch reordering anchors to the next unselected tab and deduplicates dragged IDs', () => {
+  const { organization, ids } = batchFixture();
+  assert.ok(moveTabs(organization, [ids[0], ids[1], ids[0]], 'unfiled', ids[1]));
+  assert.deepEqual(organization.order.unfiled, ids);
+  assert.ok(moveTabs(organization, [ids[0], ids[1]], 'unfiled', ids[4]));
+  assert.deepEqual(organization.order.unfiled, [ids[2], ids[3], ids[0], ids[1], ids[4]]);
+  assert.ok(moveTabs(organization, [ids[0], ids[1]], 'unfiled', null));
+  assert.deepEqual(organization.order.unfiled, [ids[2], ids[3], ids[4], ids[0], ids[1]]);
+});
+
+test('invalid batches leave all placements unchanged', () => {
+  const { organization, folder, ids } = batchFixture();
+  const original = structuredClone(organization);
+  for (const input of [null, ids[0], [], [ids[0], 'missing'], [ids[0], null], ['toString']]) {
+    assert.equal(moveTabs(organization, input, folder.id), false);
+    assert.deepEqual(organization, original);
+  }
+  assert.equal(moveTabs(organization, [ids[0]], 'missing'), false);
+  assert.deepEqual(organization, original);
 });
